@@ -5,8 +5,11 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.Cursor;
 import java.awt.Dimension;
+import java.awt.FlowLayout;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.EnumSet;
 import java.util.Set;
 import javax.swing.BorderFactory;
@@ -31,6 +34,7 @@ class StashTrackerPanel extends PluginPanel
 	private static final Color NOT_BUILT = ColorScheme.LIGHT_GRAY_COLOR.darker();
 	private static final Color BUILT_EMPTY = new Color(0xD0, 0x6A, 0x4F);
 	private static final Color FILLED = new Color(0x5F, 0xC9, 0x6A);
+	private static final int CELL = 26;
 
 	private final StashTrackerPlugin plugin;
 	private final StashTrackerConfig config;
@@ -122,16 +126,20 @@ class StashTrackerPanel extends PluginPanel
 
 		final boolean hide = hideFilled.isSelected();
 
+		final boolean grid = config.gridView();
+
 		for (StashTier tier : StashTier.values())
 		{
-			final java.util.List<StashUnit> units = new java.util.ArrayList<>();
+			final List<StashUnit> units = new ArrayList<>();
 			int tierFilled = 0;
+			int tierTotal = 0;
 			for (StashUnit unit : StashUnit.values())
 			{
 				if (unit.getTier() != tier)
 				{
 					continue;
 				}
+				tierTotal++;
 				if (filled.contains(unit))
 				{
 					tierFilled++;
@@ -142,20 +150,28 @@ class StashTrackerPanel extends PluginPanel
 				}
 			}
 
-			final int tierTotal = (int) java.util.Arrays.stream(StashUnit.values())
-				.filter(u -> u.getTier() == tier).count();
+			final JPanel header = buildTierHeader(tier, tierFilled, tierTotal);
+			header.setAlignmentX(Component.LEFT_ALIGNMENT);
+			listPanel.add(header);
 
-			listPanel.add(buildTierHeader(tier, tierFilled, tierTotal));
-
-			for (StashUnit unit : units)
+			if (grid)
 			{
-				listPanel.add(buildRow(unit));
-				if (config.showRequirements() && !filled.contains(unit))
+				final JPanel tierGrid = buildTierGrid(units);
+				tierGrid.setAlignmentX(Component.LEFT_ALIGNMENT);
+				listPanel.add(tierGrid);
+			}
+			else
+			{
+				for (StashUnit unit : units)
 				{
-					final StashRequirements.Requirement req = StashRequirements.get(unit);
-					if (req != null)
+					listPanel.add(buildRow(unit));
+					if (config.showRequirements() && !filled.contains(unit))
 					{
-						listPanel.add(buildRequirementLabel(req));
+						final StashRequirements.Requirement req = StashRequirements.get(unit);
+						if (req != null)
+						{
+							listPanel.add(buildRequirementLabel(req));
+						}
 					}
 				}
 			}
@@ -184,6 +200,84 @@ class StashTrackerPanel extends PluginPanel
 		row.add(count, BorderLayout.EAST);
 
 		return row;
+	}
+
+	private JPanel buildTierGrid(List<StashUnit> units)
+	{
+		final JPanel grid = new JPanel(new WrapLayout(FlowLayout.LEFT, 3, 3));
+		grid.setBackground(getBackground());
+		grid.setBorder(BorderFactory.createEmptyBorder(4, 0, 2, 0));
+		for (StashUnit unit : units)
+		{
+			grid.add(buildCell(unit));
+		}
+		return grid;
+	}
+
+	private JPanel buildCell(StashUnit unit)
+	{
+		final boolean isFilled = filled.contains(unit);
+		final boolean isBuilt = built.contains(unit);
+		final Color base = isFilled ? FILLED : (isBuilt ? BUILT_EMPTY : NOT_BUILT);
+		final Color edge = base.darker().darker();
+
+		final JPanel cell = new JPanel();
+		final Dimension size = new Dimension(CELL, CELL);
+		cell.setPreferredSize(size);
+		cell.setMinimumSize(size);
+		cell.setMaximumSize(size);
+		cell.setBackground(base);
+		cell.setBorder(BorderFactory.createLineBorder(edge));
+		cell.setToolTipText(tooltipFor(unit, isFilled, isBuilt));
+
+		if (config.allowManualToggle())
+		{
+			cell.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+			cell.addMouseListener(new MouseAdapter()
+			{
+				@Override
+				public void mousePressed(MouseEvent e)
+				{
+					plugin.toggleFilledManually(unit);
+				}
+
+				@Override
+				public void mouseEntered(MouseEvent e)
+				{
+					cell.setBorder(BorderFactory.createLineBorder(Color.WHITE));
+				}
+
+				@Override
+				public void mouseExited(MouseEvent e)
+				{
+					cell.setBorder(BorderFactory.createLineBorder(edge));
+				}
+			});
+		}
+
+		return cell;
+	}
+
+	private String tooltipFor(StashUnit unit, boolean isFilled, boolean isBuilt)
+	{
+		final String status = isFilled ? "Filled" : (isBuilt ? "Built, empty" : "Not built");
+		final StringBuilder sb = new StringBuilder("<html><b>")
+			.append(unit.getDisplayName()).append("</b><br>")
+			.append(unit.getTier().getDisplayName()).append(" &bull; ").append(status);
+
+		if (config.showRequirements() && !isFilled)
+		{
+			final StashRequirements.Requirement req = StashRequirements.get(unit);
+			if (req != null)
+			{
+				sb.append("<br><div style='width:200px'>").append(req.getDescription()).append("</div>");
+			}
+		}
+		if (config.allowManualToggle())
+		{
+			sb.append("<br><i>Click to toggle filled</i>");
+		}
+		return sb.append("</html>").toString();
 	}
 
 	private JPanel buildRow(StashUnit unit)

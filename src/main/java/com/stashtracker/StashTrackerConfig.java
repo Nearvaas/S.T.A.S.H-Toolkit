@@ -43,10 +43,21 @@ public interface StashTrackerConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "gridView",
+		name = "Grid view",
+		description = "Show the STASH panel as a compact square grid of status tiles instead of a list. Names and required items appear on hover.",
+		position = 4
+	)
+	default boolean gridView()
+	{
+		return true;
+	}
+
+	@ConfigItem(
 		keyName = "showRequirements",
 		name = "Show required items",
-		description = "List the items each unfilled STASH still needs underneath its row in the panel.",
-		position = 4
+		description = "Include the items each unfilled STASH still needs. In list view these appear under each row; in grid view they appear in the tile's tooltip.",
+		position = 5
 	)
 	default boolean showRequirements()
 	{
@@ -56,8 +67,8 @@ public interface StashTrackerConfig extends Config
 	@ConfigItem(
 		keyName = "highlightInventoryItems",
 		name = "Highlight STASH items",
-		description = "Outline items in your inventory/bank/equipment that still need to be deposited into a STASH, so you don't get rid of them.",
-		position = 5
+		description = "Mark items in your inventory/bank/equipment that still need to be deposited into a STASH, so you don't get rid of them.",
+		position = 6
 	)
 	default boolean highlightInventoryItems()
 	{
@@ -68,7 +79,7 @@ public interface StashTrackerConfig extends Config
 		keyName = "showWorldMapMarkers",
 		name = "World map markers",
 		description = "Show a coloured marker on the world map at every STASH unit location.",
-		position = 6
+		position = 7
 	)
 	default boolean showWorldMapMarkers()
 	{
@@ -79,7 +90,7 @@ public interface StashTrackerConfig extends Config
 		keyName = "worldMapOnlyUnfilled",
 		name = "Map: only unfilled",
 		description = "Only place world map markers for STASH units that are not yet filled.",
-		position = 7
+		position = 8
 	)
 	default boolean worldMapOnlyUnfilled()
 	{

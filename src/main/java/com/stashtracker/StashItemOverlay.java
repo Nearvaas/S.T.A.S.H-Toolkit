@@ -3,18 +3,21 @@ package com.stashtracker;
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.Rectangle;
+import java.awt.RenderingHints;
 import javax.inject.Inject;
 import net.runelite.api.widgets.WidgetItem;
 import net.runelite.client.ui.overlay.WidgetItemOverlay;
 
 /**
- * Outlines items in the inventory, bank and equipment that still need to be deposited into a STASH
- * unit, so the player doesn't accidentally drop, sell or alch a needed item.
+ * Marks items in the inventory, bank and equipment that still need to be deposited into a STASH
+ * unit, so the player doesn't accidentally drop, sell or alch a needed item. The marker is a small
+ * dot in the top-right corner of the item so it stays unobtrusive in a full bank.
  */
 class StashItemOverlay extends WidgetItemOverlay
 {
 	private static final Color HIGHLIGHT = new Color(0xFF, 0x9B, 0x21);
-	private static final Color HIGHLIGHT_FILL = new Color(0xFF, 0x9B, 0x21, 60);
+	private static final Color HALO = new Color(0, 0, 0, 190);
+	private static final int DOT = 8;
 
 	private final StashTrackerPlugin plugin;
 	private final StashTrackerConfig config;
@@ -38,9 +41,14 @@ class StashItemOverlay extends WidgetItemOverlay
 		}
 
 		final Rectangle bounds = itemWidget.getCanvasBounds();
-		graphics.setColor(HIGHLIGHT_FILL);
-		graphics.fill(bounds);
+		final int x = bounds.x + bounds.width - DOT;
+		final int y = bounds.y;
+
+		graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+		// dark halo for contrast against bright item sprites, then the coloured dot
+		graphics.setColor(HALO);
+		graphics.fillOval(x - 1, y - 1, DOT + 2, DOT + 2);
 		graphics.setColor(HIGHLIGHT);
-		graphics.draw(bounds);
+		graphics.fillOval(x, y, DOT, DOT);
 	}
 }
