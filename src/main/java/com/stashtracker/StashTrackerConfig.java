@@ -66,8 +66,8 @@ public interface StashTrackerConfig extends Config
 
 	@ConfigItem(
 		keyName = "highlightInventoryItems",
-		name = "Highlight STASH items",
-		description = "Mark items in your inventory/bank/equipment that still need to be deposited into a STASH, so you don't get rid of them.",
+		name = "Show item symbol",
+		description = "Show a small corner symbol on items in your inventory/bank/equipment that still need to be deposited into a STASH, so you don't get rid of them. Turn off to hide it entirely.",
 		position = 6
 	)
 	default boolean highlightInventoryItems()
