@@ -4,12 +4,12 @@ import com.google.inject.Provides;
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.HashSet;
-import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import javax.inject.Inject;
@@ -22,6 +22,7 @@ import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameObjectSpawned;
 import net.runelite.api.events.GameStateChanged;
+import net.runelite.api.events.GameTick;
 import net.runelite.api.events.MenuOptionClicked;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
@@ -80,7 +81,9 @@ public class StashTrackerPlugin extends Plugin
 
 	/** Item ids (variant-expanded) still owed to an unfilled STASH; read by the inventory overlay. */
 	private volatile Set<Integer> neededItemIds = Collections.emptySet();
-	private final List<WorldMapPoint> worldMapPoints = new ArrayList<>();
+	private final Map<StashUnit, WorldMapPoint> worldMapPoints = new EnumMap<>(StashUnit.class);
+	/** Set when a game event changes built state; a single refresh is run on the next game tick. */
+	private volatile boolean needsRefresh;
 	private BufferedImage filledImage;
 	private BufferedImage builtEmptyImage;
 	private BufferedImage notBuiltImage;
@@ -201,6 +204,19 @@ public class StashTrackerPlugin extends Plugin
 		}
 		if (changed)
 		{
+			// Defer the (relatively heavy) save + refresh off the object-spawn hot path. A single
+			// teleport spawns a whole scene of objects at once; coalescing to one refresh per tick
+			// avoids repeatedly rebuilding derived state during that burst.
+			needsRefresh = true;
+		}
+	}
+
+	@Subscribe
+	public void onGameTick(GameTick tick)
+	{
+		if (needsRefresh)
+		{
+			needsRefresh = false;
 			saveSet("built", built);
 			refresh();
 		}
@@ -379,7 +395,7 @@ public class StashTrackerPlugin extends Plugin
 			SwingUtilities.invokeLater(() -> p.update(builtCopy, filledCopy));
 		}
 
-		clientThread.invokeLater(() -> rebuildWorldMap(builtCopy, filledCopy));
+		clientThread.invokeLater(() -> updateWorldMap(builtCopy, filledCopy));
 	}
 
 	/** True if the item id is still owed to an unfilled STASH; queried by the inventory overlay. */
@@ -412,11 +428,17 @@ public class StashTrackerPlugin extends Plugin
 		return ids;
 	}
 
-	private void rebuildWorldMap(Set<StashUnit> builtUnits, Set<StashUnit> filledUnits)
+	/**
+	 * Updates the world map markers in place: existing points just have their image/tooltip changed
+	 * (a cheap field set), and points are only added to / removed from the manager when their
+	 * visibility actually changes. This avoids destroying and recreating all ~119 points — and the
+	 * allocation churn that came with it — every time built/filled state changes.
+	 */
+	private void updateWorldMap(Set<StashUnit> builtUnits, Set<StashUnit> filledUnits)
 	{
-		clearWorldMapPoints();
 		if (!config.showWorldMapMarkers())
 		{
+			clearWorldMapPoints();
 			return;
 		}
 
@@ -424,26 +446,42 @@ public class StashTrackerPlugin extends Plugin
 		for (StashUnit unit : StashUnit.values())
 		{
 			final boolean isFilled = filledUnits.contains(unit);
-			if (onlyUnfilled && isFilled)
+			final boolean isBuilt = builtUnits.contains(unit);
+			final boolean shouldShow = !(onlyUnfilled && isFilled);
+
+			WorldMapPoint point = worldMapPoints.get(unit);
+			if (!shouldShow)
 			{
+				if (point != null)
+				{
+					worldMapPointManager.remove(point);
+					worldMapPoints.remove(unit);
+				}
 				continue;
 			}
-			final boolean isBuilt = builtUnits.contains(unit);
-			final BufferedImage image = isFilled ? filledImage : (isBuilt ? builtEmptyImage : notBuiltImage);
 
-			final WorldMapPoint point = new WorldMapPoint(unit.getWorldPoints()[0], image);
-			point.setName(unit.getDisplayName());
-			point.setTooltip(mapTooltip(unit, isFilled, isBuilt));
-			point.setSnapToEdge(true);
-			point.setJumpOnClick(true);
-			worldMapPointManager.add(point);
-			worldMapPoints.add(point);
+			final BufferedImage image = isFilled ? filledImage : (isBuilt ? builtEmptyImage : notBuiltImage);
+			if (point == null)
+			{
+				point = new WorldMapPoint(unit.getWorldPoints()[0], image);
+				point.setName(unit.getDisplayName());
+				point.setSnapToEdge(true);
+				point.setJumpOnClick(true);
+				point.setTooltip(mapTooltip(unit, isFilled, isBuilt));
+				worldMapPointManager.add(point);
+				worldMapPoints.put(unit, point);
+			}
+			else
+			{
+				point.setImage(image);
+				point.setTooltip(mapTooltip(unit, isFilled, isBuilt));
+			}
 		}
 	}
 
 	private void clearWorldMapPoints()
 	{
-		for (WorldMapPoint point : worldMapPoints)
+		for (WorldMapPoint point : worldMapPoints.values())
 		{
 			worldMapPointManager.remove(point);
 		}
