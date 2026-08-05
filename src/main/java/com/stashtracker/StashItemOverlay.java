@@ -15,7 +15,6 @@ import net.runelite.client.ui.overlay.WidgetItemOverlay;
  */
 class StashItemOverlay extends WidgetItemOverlay
 {
-	private static final Color HIGHLIGHT = new Color(0xFF, 0x9B, 0x21);
 	private static final Color HALO = new Color(0, 0, 0, 190);
 	private static final int DOT = 8;
 
@@ -35,7 +34,14 @@ class StashItemOverlay extends WidgetItemOverlay
 	@Override
 	public void renderItemOverlay(Graphics2D graphics, int itemId, WidgetItem itemWidget)
 	{
-		if (!config.highlightInventoryItems() || !plugin.isNeededItem(itemId))
+		if (!config.highlightInventoryItems())
+		{
+			return;
+		}
+
+		// colour is the clue tier of the STASH that needs this item; null means not needed
+		final Color color = plugin.neededItemColor(itemId);
+		if (color == null)
 		{
 			return;
 		}
@@ -45,10 +51,10 @@ class StashItemOverlay extends WidgetItemOverlay
 		final int y = bounds.y;
 
 		graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-		// dark halo for contrast against bright item sprites, then the coloured dot
+		// dark halo for contrast against bright item sprites, then the tier-coloured dot
 		graphics.setColor(HALO);
 		graphics.fillOval(x - 1, y - 1, DOT + 2, DOT + 2);
-		graphics.setColor(HIGHLIGHT);
+		graphics.setColor(color);
 		graphics.fillOval(x, y, DOT, DOT);
 	}
 }

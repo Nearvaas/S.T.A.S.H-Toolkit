@@ -3,12 +3,13 @@ package com.stashtracker;
 import com.google.inject.Provides;
 import java.awt.Color;
 import java.awt.Graphics2D;
+import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.EnumSet;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -79,14 +80,14 @@ public class StashTrackerPlugin extends Plugin
 	private StashTrackerPanel panel;
 	private NavigationButton navButton;
 
-	/** Item ids (variant-expanded) still owed to an unfilled STASH; read by the inventory overlay. */
-	private volatile Set<Integer> neededItemIds = Collections.emptySet();
+	/** Needed item id -> tier colour for its marker. Membership doubles as the "highlight?" set. */
+	private volatile Map<Integer, Color> neededItemColors = Collections.emptyMap();
 	private final Map<StashUnit, WorldMapPoint> worldMapPoints = new EnumMap<>(StashUnit.class);
 	/** Set when a game event changes built state; a single refresh is run on the next game tick. */
 	private volatile boolean needsRefresh;
-	private BufferedImage filledImage;
-	private BufferedImage builtEmptyImage;
-	private BufferedImage notBuiltImage;
+	/** Per-tier world map markers: solid disc = unfilled (to do), faded = filled (done). */
+	private final Map<StashTier, BufferedImage> unfilledMarkers = new EnumMap<>(StashTier.class);
+	private final Map<StashTier, BufferedImage> filledMarkers = new EnumMap<>(StashTier.class);
 
 	/** Per-account state. Mutated on the client thread and the Swing EDT, so guarded by this lock. */
 	private final Object lock = new Object();
@@ -107,9 +108,11 @@ public class StashTrackerPlugin extends Plugin
 	@Override
 	protected void startUp()
 	{
-		filledImage = createMarker(new Color(0x5F, 0xC9, 0x6A));
-		builtEmptyImage = createMarker(new Color(0xD0, 0x6A, 0x4F));
-		notBuiltImage = createMarker(new Color(0x9E, 0x9E, 0x9E));
+		for (StashTier tier : StashTier.values())
+		{
+			unfilledMarkers.put(tier, createMarker(tier.getColor(), false));
+			filledMarkers.put(tier, createMarker(tier.getColor(), true));
+		}
 
 		panel = new StashTrackerPanel(this, config);
 
@@ -141,7 +144,7 @@ public class StashTrackerPlugin extends Plugin
 		clearWorldMapPoints();
 		navButton = null;
 		panel = null;
-		neededItemIds = Collections.emptySet();
+		neededItemColors = Collections.emptyMap();
 		synchronized (lock)
 		{
 			built.clear();
@@ -387,7 +390,7 @@ public class StashTrackerPlugin extends Plugin
 			filledCopy = filled.isEmpty() ? EnumSet.noneOf(StashUnit.class) : EnumSet.copyOf(filled);
 		}
 
-		neededItemIds = computeNeededItems(filledCopy);
+		neededItemColors = computeNeededItemColors(filledCopy);
 
 		final StashTrackerPanel p = panel;
 		if (p != null)
@@ -398,15 +401,15 @@ public class StashTrackerPlugin extends Plugin
 		clientThread.invokeLater(() -> updateWorldMap(builtCopy, filledCopy));
 	}
 
-	/** True if the item id is still owed to an unfilled STASH; queried by the inventory overlay. */
-	boolean isNeededItem(int itemId)
+	/** The tier colour to draw an item's marker in, or null if it isn't owed to any unfilled STASH. */
+	Color neededItemColor(int itemId)
 	{
-		return neededItemIds.contains(itemId);
+		return neededItemColors.get(itemId);
 	}
 
-	private Set<Integer> computeNeededItems(Set<StashUnit> filledUnits)
+	private Map<Integer, Color> computeNeededItemColors(Set<StashUnit> filledUnits)
 	{
-		final Set<Integer> ids = new HashSet<>();
+		final Map<Integer, Color> colors = new HashMap<>();
 		for (StashUnit unit : StashUnit.values())
 		{
 			if (filledUnits.contains(unit))
@@ -418,14 +421,19 @@ public class StashTrackerPlugin extends Plugin
 			{
 				continue;
 			}
+			final Color color = unit.getTier().getColor();
 			for (int id : req.getItemIds())
 			{
-				ids.add(id);
+				// first (lowest-tier) STASH needing an item wins its colour
+				colors.putIfAbsent(id, color);
 				// also match charged / degraded / trimmed variants of the canonical item
-				ids.addAll(ItemVariationMapping.getVariations(ItemVariationMapping.map(id)));
+				for (int variant : ItemVariationMapping.getVariations(ItemVariationMapping.map(id)))
+				{
+					colors.putIfAbsent(variant, color);
+				}
 			}
 		}
-		return ids;
+		return colors;
 	}
 
 	/**
@@ -460,7 +468,7 @@ public class StashTrackerPlugin extends Plugin
 				continue;
 			}
 
-			final BufferedImage image = isFilled ? filledImage : (isBuilt ? builtEmptyImage : notBuiltImage);
+			final BufferedImage image = (isFilled ? filledMarkers : unfilledMarkers).get(unit.getTier());
 			if (point == null)
 			{
 				point = new WorldMapPoint(unit.getWorldPoints()[0], image);
@@ -496,13 +504,21 @@ public class StashTrackerPlugin extends Plugin
 		return unit.getDisplayName() + " (" + unit.getTier().getDisplayName() + ") - " + status + items;
 	}
 
-	private static BufferedImage createMarker(Color color)
+	/**
+	 * A round world map marker in the given tier colour. Unfilled STASHes get a solid, prominent
+	 * disc (still to do); filled ones get a faded disc (done) so completed markers recede.
+	 */
+	private static BufferedImage createMarker(Color color, boolean filled)
 	{
 		final BufferedImage image = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
 		final Graphics2D g = image.createGraphics();
-		g.setColor(color);
+		g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+		final Color fill = filled
+			? new Color(color.getRed(), color.getGreen(), color.getBlue(), 110)
+			: color;
+		g.setColor(fill);
 		g.fillOval(2, 2, 12, 12);
-		g.setColor(color.darker().darker());
+		g.setColor(new Color(0, 0, 0, filled ? 120 : 210));
 		g.drawOval(2, 2, 12, 12);
 		g.dispose();
 		return image;
