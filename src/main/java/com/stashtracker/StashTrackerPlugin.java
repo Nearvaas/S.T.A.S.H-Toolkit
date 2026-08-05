@@ -514,11 +514,11 @@ public class StashTrackerPlugin extends Plugin
 		final Graphics2D g = image.createGraphics();
 		g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 		final Color fill = filled
-			? new Color(color.getRed(), color.getGreen(), color.getBlue(), 110)
+			? new Color(color.getRed(), color.getGreen(), color.getBlue(), 60)
 			: color;
 		g.setColor(fill);
 		g.fillOval(1, 1, 9, 9);
-		g.setColor(new Color(0, 0, 0, filled ? 120 : 210));
+		g.setColor(new Color(0, 0, 0, filled ? 70 : 210));
 		g.drawOval(1, 1, 9, 9);
 		g.dispose();
 		return image;
