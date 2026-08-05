@@ -16,7 +16,7 @@ import net.runelite.client.ui.overlay.WidgetItemOverlay;
 class StashItemOverlay extends WidgetItemOverlay
 {
 	private static final Color HALO = new Color(0, 0, 0, 190);
-	private static final int DOT = 8;
+	private static final int DOT = 6;
 
 	private final StashTrackerPlugin plugin;
 	private final StashTrackerConfig config;

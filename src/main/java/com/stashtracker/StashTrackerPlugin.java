@@ -510,16 +510,16 @@ public class StashTrackerPlugin extends Plugin
 	 */
 	private static BufferedImage createMarker(Color color, boolean filled)
 	{
-		final BufferedImage image = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
+		final BufferedImage image = new BufferedImage(12, 12, BufferedImage.TYPE_INT_ARGB);
 		final Graphics2D g = image.createGraphics();
 		g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 		final Color fill = filled
 			? new Color(color.getRed(), color.getGreen(), color.getBlue(), 110)
 			: color;
 		g.setColor(fill);
-		g.fillOval(2, 2, 12, 12);
+		g.fillOval(1, 1, 9, 9);
 		g.setColor(new Color(0, 0, 0, filled ? 120 : 210));
-		g.drawOval(2, 2, 12, 12);
+		g.drawOval(1, 1, 9, 9);
 		g.dispose();
 		return image;
 	}
